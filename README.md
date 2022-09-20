@@ -3,6 +3,16 @@
 A Dissect module implementing a parser for the FFS file system, commonly used by BSD operating systems. For more
 information, please see [the documentation](https://dissect.readthedocs.io/en/latest/projects/dissect.ffs).
 
+## Installation
+
+`dissect.ffs` is available on [PyPI](https://pypi.org/project/dissect.ffs/).
+
+```bash
+pip install dissect.ffs
+```
+
+This module is also automatically installed if you install the `dissect` package.
+
 ## Build and test instructions
 
 This project uses `tox` to build source and wheel distributions. Run the following command from the root folder to build
