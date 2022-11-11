@@ -302,7 +302,7 @@ class INode:
         return RunlistStream(self.fs.fh, self.dataruns(), self.size, self.fs.fragment_size)
 
     def _iter_blocks(self):
-        num_blocks = (self.size + self.fs.block_size - 1) // self.fs.block_size
+        num_blocks = (self.size + (self.fs.block_size - 1)) // self.fs.block_size
         num_direct_blocks = min(num_blocks, c_ffs.UFS_NDADDR)
 
         blocks = self.inode.di_db[:num_direct_blocks]
@@ -319,6 +319,9 @@ class INode:
 
                     yield block
                     num_blocks -= 1
+
+                    if num_blocks == 0:
+                        return
 
     def _walk_indirect(self, block, level, num_blocks):
         yield block, level
