@@ -206,11 +206,15 @@ class INode:
 
     @cached_property
     def btime(self):
-        return ts.from_unix_ns(self.btime_ns)
+        if btime_ns := self.btime_ns:
+            return ts.from_unix_ns(btime_ns)
+        return None
 
     @cached_property
     def btime_ns(self):
-        return (self.inode.di_birthtime * 1000000000) + self.inode.di_birthnsec
+        if hasattr(self.inode, "di_birthtime"):
+            return (self.inode.di_birthtime * 1000000000) + self.inode.di_birthnsec
+        return None
 
     @cached_property
     def link(self):
