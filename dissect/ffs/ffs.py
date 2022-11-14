@@ -186,7 +186,7 @@ class INode:
 
     @cached_property
     def atime_ns(self):
-        return (self.inode.di_atime * 1000000000) + self.inode.di_atimensec
+        return (self.inode.di_atime * 1_000_000_000) + self.inode.di_atimensec
 
     @cached_property
     def mtime(self):
@@ -194,7 +194,7 @@ class INode:
 
     @cached_property
     def mtime_ns(self):
-        return (self.inode.di_mtime * 1000000000) + self.inode.di_mtimensec
+        return (self.inode.di_mtime * 1_000_000_000) + self.inode.di_mtimensec
 
     @cached_property
     def ctime(self):
@@ -202,7 +202,7 @@ class INode:
 
     @cached_property
     def ctime_ns(self):
-        return (self.inode.di_ctime * 1000000000) + self.inode.di_ctimensec
+        return (self.inode.di_ctime * 1_000_000_000) + self.inode.di_ctimensec
 
     @cached_property
     def btime(self):
@@ -213,7 +213,7 @@ class INode:
     @cached_property
     def btime_ns(self):
         if hasattr(self.inode, "di_birthtime"):
-            return (self.inode.di_birthtime * 1000000000) + self.inode.di_birthnsec
+            return (self.inode.di_birthtime * 1_000_000_000) + self.inode.di_birthnsec
         return None
 
     @cached_property
