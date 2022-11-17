@@ -83,6 +83,8 @@ class FFS:
         return INode(self, inum, name, filetype, parent=parent)
 
     def get(self, path, node=None):
+        if isinstance(path, int):
+            return self.inode(path)
 
         path = path.replace("\\", "/")
         node = node if node else self.root
