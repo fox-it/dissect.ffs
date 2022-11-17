@@ -1,5 +1,7 @@
-import stat
 import datetime
+import gzip
+import stat
+import pytest
 
 from dissect.ffs.ffs import FFS
 
@@ -18,3 +20,25 @@ def test_ffs(ffs_bin):
 
     test_file = ffs.get("test_file")
     assert test_file.open().read() == b"test contents\n"
+
+
+@pytest.mark.parametrize(
+    "image_file",
+    [
+        ("tests/data/ffs_symlink_test1.bin.gz"),
+        ("tests/data/ffs_symlink_test2.bin.gz"),
+        ("tests/data/ffs_symlink_test3.bin.gz"),
+    ],
+)
+def test_symlinks(image_file):
+
+    path = "/path/to/dir/with/file.ext"
+    expect = b"resolved!\n"
+
+    def resolve(node):
+        while node.type == stat.S_IFLNK:
+            node = node.link_inode
+        return node
+
+    with gzip.open(image_file, "rb") as disk:
+        assert resolve(FFS(disk).get(path)).open().read() == expect

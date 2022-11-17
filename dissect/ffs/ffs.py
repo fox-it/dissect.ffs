@@ -79,26 +79,32 @@ class FFS:
             yield self.cylinder_group(num)
 
     @lru_cache(4096)
-    def inode(self, inum, name=None, filetype=None):
-        return INode(self, inum, name, filetype)
+    def inode(self, inum, name=None, filetype=None, parent=None):
+        return INode(self, inum, name, filetype, parent=parent)
 
     def get(self, path, node=None):
-        if isinstance(path, int):
-            return self.inode(path)
 
-        node = node or self.root
+        path = path.replace("\\", "/")
+        node = node if node else self.root
 
         parts = path.split("/")
-        for i, p in enumerate(parts):
-            if not p:
+
+        for part_num, part in enumerate(parts):
+            if not part:
                 continue
 
-            for child in node.iterdir():
-                if child.name == p:
-                    node = child
-                    break
-            else:
+            while node._type == stat.S_IFLNK and part_num < len(parts):
+                node = node.link_inode
+
+            dirlist = node.listdir()
+
+            # there can be residual nul bytes in the file name
+            part = part.replace("\x00", "")
+
+            if part not in dirlist:
                 raise FileNotFoundError(f"File not found: {path}")
+
+            node = dirlist[part]
 
         return node
 
@@ -143,12 +149,13 @@ class CylinderGroup:
 
 
 class INode:
-    def __init__(self, fs, inum, name=None, filetype=None):
+    def __init__(self, fs, inum, name=None, filetype=None, parent=None):
         self.fs = fs
         self.inum = inum
         self.name = name
         self._type = filetype
-
+        self._link_inode = None
+        self.parent = parent
         self._runlist = None
 
     def __repr__(self):
@@ -223,6 +230,18 @@ class INode:
 
         return self.open().read().decode("utf-8")
 
+    @property
+    def link_inode(self):
+        if not self._link_inode:
+            # Relative lookups work because . and .. are actual directory entries
+            link = self.link
+            if link.startswith("/"):
+                relnode = None
+            else:
+                relnode = self.parent
+            self._link_inode = self.fs.get(self.link, relnode)
+        return self._link_inode
+
     def is_dir(self):
         return self.type == stat.S_IFDIR
 
@@ -247,7 +266,7 @@ class INode:
             dname = buf.read(dirent.d_namlen).decode("utf-8", "surrogateescape")
             dtype = dirent.d_type << 12
 
-            yield self.fs.inode(dirent.d_ino, dname, dtype)
+            yield self.fs.inode(dirent.d_ino, dname, dtype, parent=self)
 
             # Can find slack entries if d_reclen > d_namlen (rounded to nearest 4 bytes)
             offset += dirent.d_reclen
