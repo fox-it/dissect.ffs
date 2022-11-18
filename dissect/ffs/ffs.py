@@ -49,8 +49,8 @@ class FFS:
         self.fragment_size = self.sb.fs_fsize
         self.inode_size = self.sb.fs_bsize // self.sb.fs_inopb
 
-        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode("utf-8")
-        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode("utf-8")
+        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode("utf-8", errors="surrogateescape")
+        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode("utf-8", errors="surrogateescape")
 
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
 
@@ -99,9 +99,6 @@ class FFS:
                 node = node.link_inode
 
             dirlist = node.listdir()
-
-            # there can be residual nul bytes in the file name
-            part = part.replace("\x00", "")
 
             if part not in dirlist:
                 raise FileNotFoundError(f"File not found: {path}")
@@ -320,6 +317,7 @@ class INode:
             self.fs._addr_type[c_ffs.UFS_NDADDR].write(buf, self.inode.di_db)
             self.fs._addr_type[c_ffs.UFS_NIADDR].write(buf, self.inode.di_ib)
             buf.seek(0)
+            buf.truncate(self.size)
             # Need to add a size attribute to maintain compatibility with dissect streams
             buf.size = self.size
             return buf
