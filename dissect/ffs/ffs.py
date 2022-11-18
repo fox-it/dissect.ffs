@@ -262,7 +262,7 @@ class INode:
 
         while offset < self.size - 8:
             dirent = c_ffs.direct(buf)
-            dname = buf.read(dirent.d_namlen).decode("utf-8", "surrogateescape")
+            dname = buf.read(dirent.d_namlen).decode(errors="surrogateescape")
             dtype = dirent.d_type << 12
 
             yield self.fs.inode(dirent.d_ino, dname, dtype, parent=self)
