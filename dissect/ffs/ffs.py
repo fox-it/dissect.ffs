@@ -49,8 +49,8 @@ class FFS:
         self.fragment_size = self.sb.fs_fsize
         self.inode_size = self.sb.fs_bsize // self.sb.fs_inopb
 
-        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode("utf-8", errors="surrogateescape")
-        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode("utf-8", errors="surrogateescape")
+        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode(errors="surrogateescape")
+        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode(errors="surrogateescape")
 
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
 
