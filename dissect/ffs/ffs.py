@@ -227,7 +227,7 @@ class INode:
         if not self.is_symlink():
             raise NotASymlinkError(f"{self!r} is not a symlink")
 
-        return self.open().read().decode("utf-8", errors="surrogateescape")
+        return self.open().read().decode(errors="surrogateescape")
 
     @property
     def link_inode(self):
