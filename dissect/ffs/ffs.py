@@ -152,8 +152,8 @@ class INode:
         self.inum = inum
         self.name = name
         self._type = filetype
-        self._link_inode = None
         self.parent = parent
+
         self._runlist = None
 
     def __repr__(self):
