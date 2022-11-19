@@ -86,7 +86,7 @@ class FFS:
         if isinstance(path, int):
             return self.inode(path)
 
-        node = node if node else self.root
+        node = node or self.root
 
         parts = path.split("/")
 
