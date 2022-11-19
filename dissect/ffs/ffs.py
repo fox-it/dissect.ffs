@@ -228,17 +228,15 @@ class INode:
 
         return self.open().read().decode(errors="surrogateescape")
 
-    @property
+    @cached_property
     def link_inode(self):
-        if not self._link_inode:
-            # Relative lookups work because . and .. are actual directory entries
-            link = self.link
-            if link.startswith("/"):
-                relnode = None
-            else:
-                relnode = self.parent
-            self._link_inode = self.fs.get(self.link, relnode)
-        return self._link_inode
+        # Relative lookups work because . and .. are actual directory entries
+        link = self.link
+        if link.startswith("/"):
+            relnode = None
+        else:
+            relnode = self.parent
+        return self.fs.get(self.link, relnode)
 
     def is_dir(self):
         return self.type == stat.S_IFDIR
