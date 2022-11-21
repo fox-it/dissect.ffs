@@ -49,8 +49,8 @@ class FFS:
         self.fragment_size = self.sb.fs_fsize
         self.inode_size = self.sb.fs_bsize // self.sb.fs_inopb
 
-        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode("utf-8")
-        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode("utf-8")
+        self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode(errors="surrogateescape")
+        self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode(errors="surrogateescape")
 
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
 
@@ -79,8 +79,8 @@ class FFS:
             yield self.cylinder_group(num)
 
     @lru_cache(4096)
-    def inode(self, inum, name=None, filetype=None):
-        return INode(self, inum, name, filetype)
+    def inode(self, inum, name=None, filetype=None, parent=None):
+        return INode(self, inum, name, filetype, parent=parent)
 
     def get(self, path, node=None):
         if isinstance(path, int):
@@ -89,16 +89,20 @@ class FFS:
         node = node or self.root
 
         parts = path.split("/")
-        for i, p in enumerate(parts):
-            if not p:
+
+        for part_num, part in enumerate(parts):
+            if not part:
                 continue
 
-            for child in node.iterdir():
-                if child.name == p:
-                    node = child
-                    break
-            else:
+            while node._type == stat.S_IFLNK and part_num < len(parts):
+                node = node.link_inode
+
+            dirlist = node.listdir()
+
+            if part not in dirlist:
                 raise FileNotFoundError(f"File not found: {path}")
+
+            node = dirlist[part]
 
         return node
 
@@ -143,11 +147,12 @@ class CylinderGroup:
 
 
 class INode:
-    def __init__(self, fs, inum, name=None, filetype=None):
+    def __init__(self, fs, inum, name=None, filetype=None, parent=None):
         self.fs = fs
         self.inum = inum
         self.name = name
         self._type = filetype
+        self.parent = parent
 
         self._runlist = None
 
@@ -221,7 +226,17 @@ class INode:
         if not self.is_symlink():
             raise NotASymlinkError(f"{self!r} is not a symlink")
 
-        return self.open().read().decode("utf-8")
+        return self.open().read().decode(errors="surrogateescape")
+
+    @cached_property
+    def link_inode(self):
+        # Relative lookups work because . and .. are actual directory entries
+        link = self.link
+        if link.startswith("/"):
+            relnode = None
+        else:
+            relnode = self.parent
+        return self.fs.get(self.link, relnode)
 
     def is_dir(self):
         return self.type == stat.S_IFDIR
@@ -244,10 +259,10 @@ class INode:
 
         while offset < self.size - 8:
             dirent = c_ffs.direct(buf)
-            dname = buf.read(dirent.d_namlen).decode("utf-8", "surrogateescape")
+            dname = buf.read(dirent.d_namlen).decode(errors="surrogateescape")
             dtype = dirent.d_type << 12
 
-            yield self.fs.inode(dirent.d_ino, dname, dtype)
+            yield self.fs.inode(dirent.d_ino, dname, dtype, parent=self)
 
             # Can find slack entries if d_reclen > d_namlen (rounded to nearest 4 bytes)
             offset += dirent.d_reclen
@@ -299,6 +314,7 @@ class INode:
             self.fs._addr_type[c_ffs.UFS_NDADDR].write(buf, self.inode.di_db)
             self.fs._addr_type[c_ffs.UFS_NIADDR].write(buf, self.inode.di_ib)
             buf.seek(0)
+            buf.truncate(self.size)
             # Need to add a size attribute to maintain compatibility with dissect streams
             buf.size = self.size
             return buf
