@@ -1,4 +1,6 @@
 import io
+import logging
+import os
 import stat
 from functools import cached_property, lru_cache
 
@@ -8,11 +10,13 @@ from dissect.util.stream import RunlistStream
 from dissect.ffs.c_ffs import c_ffs
 from dissect.ffs.exceptions import (
     Error,
-    NotADirectoryError,
     FileNotFoundError,
+    NotADirectoryError,
     NotASymlinkError,
 )
 
+log = logging.getLogger(__name__)
+log.setLevel(os.getenv("DISSECT_LOG_FFS", "CRITICAL"))
 
 DEV_BSIZE = 512
 SBLOCKSEARCH = [
@@ -97,12 +101,12 @@ class FFS:
             while node._type == stat.S_IFLNK and part_num < len(parts):
                 node = node.link_inode
 
-            dirlist = node.listdir()
-
-            if part not in dirlist:
+            for entry in node.iterdir():
+                if entry.name == part:
+                    node = entry
+                    break
+            else:
                 raise FileNotFoundError(f"File not found: {path}")
-
-            node = dirlist[part]
 
         return node
 
@@ -154,6 +158,7 @@ class INode:
         self._type = filetype
         self.parent = parent
 
+        self._dirlist = None
         self._runlist = None
 
     def __repr__(self):
@@ -248,7 +253,9 @@ class INode:
         return self.type == stat.S_IFLNK
 
     def listdir(self):
-        return {node.name: node for node in self.iterdir()}
+        if not self._dirlist:
+            self._dirlist = {node.name: node for node in self.iterdir()}
+        return self._dirlist
 
     def iterdir(self):
         if not self.is_dir():
@@ -259,6 +266,10 @@ class INode:
 
         while offset < self.size - 8:
             dirent = c_ffs.direct(buf)
+            if dirent.d_reclen == 0:
+                log.critical("Zero-length directory entry in %s (offset 0x%x)", self, offset)
+                return
+
             dname = buf.read(dirent.d_namlen).decode(errors="surrogateescape")
             dtype = dirent.d_type << 12
 
