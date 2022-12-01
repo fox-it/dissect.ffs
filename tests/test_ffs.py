@@ -1,9 +1,12 @@
 import datetime
 import gzip
 import stat
+from io import BytesIO
+from unittest.mock import call, patch
+
 import pytest
 
-from dissect.ffs.ffs import FFS
+from dissect.ffs.ffs import FFS, INode
 
 
 def test_ffs(ffs_bin):
@@ -42,3 +45,14 @@ def test_symlinks(image_file):
 
     with gzip.open(image_file, "rb") as disk:
         assert resolve(FFS(disk).get(path)).open().read() == expect
+
+
+@patch("dissect.ffs.ffs.INode.open", return_value=BytesIO(b"\x00" * 16))
+@patch("dissect.ffs.ffs.log", create=True, return_value=None)
+@patch("dissect.ffs.ffs.FFS")
+def test_infinite_loop_protection(FFS, log, *args):
+    inode = INode(FFS, 1, filetype=stat.S_IFDIR)
+    inode.size = 16
+    for _ in inode.iterdir():
+        pass
+    assert call.critical("Zero-length directory entry in %s (offset 0x%x)", inode, 0) in log.mock_calls
