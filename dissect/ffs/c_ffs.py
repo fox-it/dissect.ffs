@@ -2,7 +2,6 @@
 
 from dissect import cstruct
 
-
 ffs_def = """
 typedef uint8 u_int8_t;
 typedef uint16 u_int16_t;
