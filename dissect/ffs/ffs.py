@@ -342,9 +342,9 @@ class INode:
         yield from blocks
 
         if num_blocks > 0:
-            for level in range(1, c_ffs.UFS_NIADDR):
-                indirect_block = self.inode.di_ib[level - 1]
-                for block, level in self._walk_indirect(indirect_block, level, num_blocks):
+            for level in range(c_ffs.UFS_NIADDR):
+                indirect_block = self.inode.di_ib[level]
+                for block, level in self._walk_indirect(indirect_block, level + 1, num_blocks):
                     if level != 0:
                         continue
 
