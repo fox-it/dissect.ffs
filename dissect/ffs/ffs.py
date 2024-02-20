@@ -56,6 +56,9 @@ class FFS:
         self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode(errors="surrogateescape")
         self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode(errors="surrogateescape")
 
+        self.cylinder_group = lru_cache(1024)(self.cylinder_group)
+        self.inode = lru_cache(4096)(self.inode)
+
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
 
     @staticmethod
@@ -74,7 +77,6 @@ class FFS:
 
         return sb
 
-    @lru_cache(1024)
     def cylinder_group(self, num):
         return CylinderGroup(self, num)
 
@@ -82,7 +84,6 @@ class FFS:
         for num in range(self.sb.fs_ncg):
             yield self.cylinder_group(num)
 
-    @lru_cache(4096)
     def inode(self, inum, name=None, filetype=None, parent=None):
         return INode(self, inum, name, filetype, parent=parent)
 
