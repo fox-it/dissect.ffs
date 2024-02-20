@@ -56,9 +56,10 @@ class FFS:
         self.mount_name = bytes(self.sb.fs_fsmnt).split(b"\x00")[0].decode(errors="surrogateescape")
         self.volume_name = bytes(self.sb.fs_volname).split(b"\x00")[0].decode(errors="surrogateescape")
 
+        self.cylinder_group = lru_cache(1024)(self.cylinder_group)
+        self.inode = lru_cache(4096)(self.inode)
+
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
-        lru_cache(1024)(self.cylinder_group)
-        lru_cache(4096)(self.inode)
 
     @staticmethod
     def read_sb(fh, offset):
