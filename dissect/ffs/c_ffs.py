@@ -1,6 +1,6 @@
 # Reference: https://github.com/freebsd/freebsd-src/tree/main/sys/ufs
 
-from dissect import cstruct
+from dissect.cstruct import cstruct
 
 ffs_def = """
 typedef uint8 u_int8_t;
@@ -460,5 +460,4 @@ struct direct {
 };
 """
 
-c_ffs = cstruct.cstruct()
-c_ffs.load(ffs_def)
+c_ffs = cstruct().load(ffs_def)
