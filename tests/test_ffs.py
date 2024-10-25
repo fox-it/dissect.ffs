@@ -13,6 +13,7 @@ def test_ffs(ffs_bin):
     ffs = FFS(ffs_bin)
 
     assert ffs.version == 2
+    assert ffs.block_size == 32 * 1024
 
     root = ffs.root
     assert root.type == stat.S_IFDIR
@@ -22,7 +23,11 @@ def test_ffs(ffs_bin):
     assert list(root.listdir().keys()) == [".", "..", ".snap", "test_file", "test_dir"]
 
     test_file = ffs.get("test_file")
+    assert test_file.nblocks == 8
     assert test_file.open().read() == b"test contents\n"
+
+    test_dir = ffs.get("test_dir")
+    assert test_dir.nblocks == 8
 
 
 @pytest.mark.parametrize(
@@ -43,7 +48,9 @@ def test_symlinks(image_file):
         return node
 
     with gzip.open(image_file, "rb") as disk:
-        assert resolve(FFS(disk).get(path)).open().read() == expect
+        node = FFS(disk).get(path)
+        assert node.nblocks == 0
+        assert resolve(node).open().read() == expect
 
 
 @patch("dissect.ffs.ffs.INode.open", return_value=BytesIO(b"\x00" * 16))
