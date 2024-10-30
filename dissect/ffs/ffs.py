@@ -244,6 +244,10 @@ class INode:
             relnode = self.parent
         return self.fs.get(self.link, relnode)
 
+    @cached_property
+    def nblocks(self):
+        return self.inode.di_blocks
+
     def is_dir(self):
         return self.type == stat.S_IFDIR
 
