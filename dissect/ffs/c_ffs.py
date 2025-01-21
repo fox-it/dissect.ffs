@@ -1,5 +1,7 @@
 # Reference: https://github.com/freebsd/freebsd-src/tree/main/sys/ufs
 
+from __future__ import annotations
+
 from dissect.cstruct import cstruct
 
 ffs_def = """
