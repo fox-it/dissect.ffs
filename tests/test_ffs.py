@@ -1,15 +1,21 @@
+from __future__ import annotations
+
 import datetime
 import gzip
 import stat
 from io import BytesIO
+from typing import TYPE_CHECKING, BinaryIO
 from unittest.mock import call, patch
 
 import pytest
 
 from dissect.ffs.ffs import FFS, INode
 
+if TYPE_CHECKING:
+    from logging import Logger
 
-def test_ffs(ffs_bin):
+
+def test_ffs(ffs_bin: BinaryIO) -> None:
     ffs = FFS(ffs_bin)
 
     assert ffs.version == 2
@@ -38,11 +44,11 @@ def test_ffs(ffs_bin):
         ("tests/data/ffs_symlink_test3.bin.gz"),
     ],
 )
-def test_symlinks(image_file):
+def test_symlinks(image_file: str) -> None:
     path = "/path/to/dir/with/file.ext"
     expect = b"resolved!\n"
 
-    def resolve(node):
+    def resolve(node: INode) -> INode:
         while node.type == stat.S_IFLNK:
             node = node.link_inode
         return node
@@ -56,7 +62,7 @@ def test_symlinks(image_file):
 @patch("dissect.ffs.ffs.INode.open", return_value=BytesIO(b"\x00" * 16))
 @patch("dissect.ffs.ffs.log", create=True, return_value=None)
 @patch("dissect.ffs.ffs.FFS")
-def test_infinite_loop_protection(FFS, log, *args):
+def test_infinite_loop_protection(FFS: FFS, log: Logger, *args) -> None:
     inode = INode(FFS, 1, filetype=stat.S_IFDIR)
     inode.size = 16
     for _ in inode.iterdir():

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import io
 import logging
 import os
 import stat
 from functools import cached_property, lru_cache
+from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.util import ts
 from dissect.util.stream import RunlistStream
@@ -14,6 +17,10 @@ from dissect.ffs.exceptions import (
     NotADirectoryError,
     NotASymlinkError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from datetime import datetime
 
 log = logging.getLogger(__name__)
 log.setLevel(os.getenv("DISSECT_LOG_FFS", "CRITICAL"))
@@ -28,7 +35,7 @@ SBLOCKSEARCH = [
 
 
 class FFS:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
 
         self.sb = None
@@ -62,7 +69,7 @@ class FFS:
         self.root = self.inode(c_ffs.UFS_ROOTINO, "/")
 
     @staticmethod
-    def read_sb(fh, offset):
+    def read_sb(fh: BinaryIO, offset: int) -> c_ffs.fs:
         fh.seek(offset)
         try:
             sb = c_ffs.fs(fh)
@@ -77,17 +84,19 @@ class FFS:
 
         return sb
 
-    def cylinder_group(self, num):
+    def cylinder_group(self, num: int) -> CylinderGroup:
         return CylinderGroup(self, num)
 
-    def cylinder_groups(self):
+    def cylinder_groups(self) -> Iterator[CylinderGroup]:
         for num in range(self.sb.fs_ncg):
             yield self.cylinder_group(num)
 
-    def inode(self, inum, name=None, filetype=None, parent=None):
+    def inode(
+        self, inum: int, name: str | None = None, filetype: int | None = None, parent: INode | None = None
+    ) -> INode:
         return INode(self, inum, name, filetype, parent=parent)
 
-    def get(self, path, node=None):
+    def get(self, path: str | int, node: INode | None = None) -> INode:
         if isinstance(path, int):
             return self.inode(path)
 
@@ -111,7 +120,7 @@ class FFS:
 
         return node
 
-    def iter_inodes(self):
+    def iter_inodes(self) -> Iterator[INode]:
         cur_cg = None
         cur_cgnum = None
 
@@ -127,7 +136,7 @@ class FFS:
 
 
 class CylinderGroup:
-    def __init__(self, fs, num):
+    def __init__(self, fs: FFS, num: int):
         self.fs = fs
         self.num = num
 
@@ -139,7 +148,7 @@ class CylinderGroup:
         if self.cg.cg_magic != c_ffs.CG_MAGIC:
             raise Error("Invalid cylinder group magic")
 
-    def inode_allocated(self, inum):
+    def inode_allocated(self, inum: int) -> bool:
         rel_inum = inum % self.fs.sb.fs_ipg
 
         byte_offset, bit_offset = divmod(rel_inum, 8)
@@ -152,7 +161,9 @@ class CylinderGroup:
 
 
 class INode:
-    def __init__(self, fs, inum, name=None, filetype=None, parent=None):
+    def __init__(
+        self, fs: FFS, inum: int, name: str | None = None, filetype: int | None = None, parent: INode | None = None
+    ):
         self.fs = fs
         self.inum = inum
         self.name = name
@@ -162,107 +173,104 @@ class INode:
         self._dirlist = None
         self._runlist = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<inode {self.inum:d}>"
 
-    def _read_inode(self):
+    def _read_inode(self) -> c_ffs.ufs1_dinode | c_ffs.ufs2_dinode:
         block = fsbtodb(self.fs, ino_to_fsba(self.fs, self.inum))
         offset = (block * DEV_BSIZE) + (ino_to_fsbo(self.fs, self.inum) * self.fs.inode_size)
         self.fs.fh.seek(offset)
         return self.fs._inode_type(self.fs.fh)
 
     @cached_property
-    def cg(self):
+    def cg(self) -> CylinderGroup:
         return self.fs.cylinder_group(ino_to_cg(self.fs, self.inum))
 
     @cached_property
-    def inode(self):
+    def inode(self) -> c_ffs.ufs1_dinode | c_ffs.ufs2_dinode:
         return self._read_inode()
 
     @cached_property
-    def size(self):
+    def size(self) -> int:
         return self.inode.di_size
 
     @cached_property
-    def type(self):
+    def type(self) -> int:
         return self._type or stat.S_IFMT(self.inode.di_mode)
 
     @cached_property
-    def mode(self):
+    def mode(self) -> int:
         return self.inode.di_mode
 
     @cached_property
-    def atime(self):
+    def atime(self) -> datetime:
         return ts.from_unix_ns(self.atime_ns)
 
     @cached_property
-    def atime_ns(self):
+    def atime_ns(self) -> int:
         return (self.inode.di_atime * 1_000_000_000) + self.inode.di_atimensec
 
     @cached_property
-    def mtime(self):
+    def mtime(self) -> datetime:
         return ts.from_unix_ns(self.mtime_ns)
 
     @cached_property
-    def mtime_ns(self):
+    def mtime_ns(self) -> int:
         return (self.inode.di_mtime * 1_000_000_000) + self.inode.di_mtimensec
 
     @cached_property
-    def ctime(self):
+    def ctime(self) -> datetime:
         return ts.from_unix_ns(self.ctime_ns)
 
     @cached_property
-    def ctime_ns(self):
+    def ctime_ns(self) -> int:
         return (self.inode.di_ctime * 1_000_000_000) + self.inode.di_ctimensec
 
     @cached_property
-    def btime(self):
+    def btime(self) -> datetime | None:
         if btime_ns := self.btime_ns:
             return ts.from_unix_ns(btime_ns)
         return None
 
     @cached_property
-    def btime_ns(self):
+    def btime_ns(self) -> int | None:
         if hasattr(self.inode, "di_birthtime"):
             return (self.inode.di_birthtime * 1_000_000_000) + self.inode.di_birthnsec
         return None
 
     @cached_property
-    def link(self):
+    def link(self) -> str:
         if not self.is_symlink():
             raise NotASymlinkError(f"{self!r} is not a symlink")
 
         return self.open().read().decode(errors="surrogateescape")
 
     @cached_property
-    def link_inode(self):
+    def link_inode(self) -> INode:
         # Relative lookups work because . and .. are actual directory entries
         link = self.link
-        if link.startswith("/"):
-            relnode = None
-        else:
-            relnode = self.parent
+        relnode = None if link.startswith("/") else self.parent
         return self.fs.get(self.link, relnode)
 
     @cached_property
-    def nblocks(self):
+    def nblocks(self) -> int:
         return self.inode.di_blocks
 
-    def is_dir(self):
+    def is_dir(self) -> bool:
         return self.type == stat.S_IFDIR
 
-    def is_file(self):
+    def is_file(self) -> bool:
         return self.type == stat.S_IFREG
 
-    def is_symlink(self):
+    def is_symlink(self) -> bool:
         return self.type == stat.S_IFLNK
 
-    def listdir(self):
+    def listdir(self) -> dict[str, INode]:
         if not self._dirlist:
             self._dirlist = {node.name: node for node in self.iterdir()}
         return self._dirlist
 
-    def iterdir(self):
+    def iterdir(self) -> Iterator[INode]:
         if not self.is_dir():
             raise NotADirectoryError(f"{self!r} is not a directory")
 
@@ -284,7 +292,7 @@ class INode:
             offset += dirent.d_reclen
             buf.seek(offset)
 
-    def dataruns(self):
+    def dataruns(self) -> list[tuple[int, int]]:
         # So this is a bit confusing.
         # FFS uses file system blocks for logical addressing (e.g. 32k).
         # File system blocks are made up of fragments (e.g. 4k).
@@ -322,7 +330,7 @@ class INode:
 
         return self._runlist
 
-    def open(self):
+    def open(self) -> io.BytesIO | RunlistStream:
         if self.is_symlink() and self.size < self.fs.sb.fs_maxsymlinklen:
             # This is a bit hacky since we prefer to parse di_db and di_ib as arrays, rather than bytes
             # However, short symlinks store the link here
@@ -337,7 +345,7 @@ class INode:
 
         return RunlistStream(self.fs.fh, self.dataruns(), self.size, self.fs.fragment_size)
 
-    def _iter_blocks(self):
+    def _iter_blocks(self) -> Iterator[int]:
         num_blocks = (self.size + (self.fs.block_size - 1)) // self.fs.block_size
         num_direct_blocks = min(num_blocks, c_ffs.UFS_NDADDR)
 
@@ -347,10 +355,10 @@ class INode:
         yield from blocks
 
         if num_blocks > 0:
-            for level in range(c_ffs.UFS_NIADDR):
-                indirect_block = self.inode.di_ib[level]
-                for block, level in self._walk_indirect(indirect_block, level + 1, num_blocks):
-                    if level != 0:
+            for level1 in range(c_ffs.UFS_NIADDR):
+                indirect_block = self.inode.di_ib[level1]
+                for block, level2 in self._walk_indirect(indirect_block, level1 + 1, num_blocks):
+                    if level2 != 0:
                         continue
 
                     yield block
@@ -359,7 +367,7 @@ class INode:
                     if num_blocks == 0:
                         return
 
-    def _walk_indirect(self, block, level, num_blocks):
+    def _walk_indirect(self, block: int, level: int, num_blocks: int) -> Iterator[tuple[int, int]]:
         yield block, level
 
         if level > 0:
@@ -376,63 +384,63 @@ class INode:
 
 # Some useful C macros used by UFS/FFS converted to Python functions
 # The names are kept to ease debugging/readability when comparing to the original source.
-def fsbtodb(fs, b):
+def fsbtodb(fs: FFS, b: int) -> int:
     return b << fs.sb.fs_fsbtodb
 
 
-def dbtofsb(fs, b):
+def dbtofsb(fs: FFS, b: int) -> int:
     return b >> fs.sb.fs_fsbtodb
 
 
-def cgbase(fs, c):
+def cgbase(fs: FFS, c: int) -> int:
     return fs.sb.fs_fpg * c
 
 
-def cgdata(fs, c):
+def cgdata(fs: FFS, c: int) -> int:
     return cgdmin(fs, c) + fs.sb.fs_metaspace
 
 
-def cgmeta(fs, c):
+def cgmeta(fs: FFS, c: int) -> int:
     return cgdmin(fs, c)
 
 
-def cgdmin(fs, c):
+def cgdmin(fs: FFS, c: int) -> int:
     return cgstart(fs, c) + fs.sb.fs_dblkno
 
 
-def cgimin(fs, c):
+def cgimin(fs: FFS, c: int) -> int:
     return cgstart(fs, c) + fs.sb.fs_iblkno
 
 
-def cgsblock(fs, c):
+def cgsblock(fs: FFS, c: int) -> int:
     return cgstart(fs, c) + fs.sb.fs_sblkno
 
 
-def cgtod(fs, c):
+def cgtod(fs: FFS, c: int) -> int:
     return cgstart(fs, c) + fs.sb.fs_cblkno
 
 
-def cgstart(fs, c):
+def cgstart(fs: FFS, c: int) -> int:
     if fs.sb.fs_magic == c_ffs.FS_UFS2_MAGIC:
         return cgbase(fs, c)
-    else:
-        return cgbase(fs, c) + fs.sb.fs_old_cgoffset * (c & ~fs.sb.fs_old_cgmask)
+
+    return cgbase(fs, c) + fs.sb.fs_old_cgoffset * (c & ~fs.sb.fs_old_cgmask)
 
 
-def ino_to_cg(fs, x):
+def ino_to_cg(fs: FFS, x: int) -> int:
     # inode number to cylinder group number.
     return x // fs.sb.fs_ipg
 
 
-def ino_to_fsba(fs, x):
+def ino_to_fsba(fs: FFS, x: int) -> int:
     # inode number to filesystem block address.
     return cgimin(fs, ino_to_cg(fs, x)) + blkstofrags(fs, (x % fs.sb.fs_ipg) // fs.sb.fs_inopb)
 
 
-def ino_to_fsbo(fs, x):
+def ino_to_fsbo(fs: FFS, x: int) -> int:
     # inode number to filesystem block offset.
     return x % fs.sb.fs_inopb
 
 
-def blkstofrags(fs, blks):
+def blkstofrags(fs: FFS, blks: int) -> int:
     return blks << fs.sb.fs_fragshift
