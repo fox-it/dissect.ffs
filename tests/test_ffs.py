@@ -10,6 +10,7 @@ from unittest.mock import call, patch
 import pytest
 
 from dissect.ffs.ffs import FFS, INode
+from tests._utils import absolute_path
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -39,9 +40,9 @@ def test_ffs(ffs_bin: BinaryIO) -> None:
 @pytest.mark.parametrize(
     "image_file",
     [
-        ("tests/data/ffs_symlink_test1.bin.gz"),
-        ("tests/data/ffs_symlink_test2.bin.gz"),
-        ("tests/data/ffs_symlink_test3.bin.gz"),
+        absolute_path("data/ffs_symlink_test1.bin.gz"),
+        absolute_path("data/ffs_symlink_test2.bin.gz"),
+        absolute_path("data/ffs_symlink_test3.bin.gz"),
     ],
 )
 def test_symlinks(image_file: str) -> None:
