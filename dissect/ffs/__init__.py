@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dissect.ffs.exceptions import (
     Error,
     FileNotFoundError,
